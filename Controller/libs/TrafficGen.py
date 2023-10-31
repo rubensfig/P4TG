@@ -35,6 +35,7 @@ from libs.packet_formats.IPv4 import IPv4
 from libs.packet_formats.P4TG import P4TG
 from libs.packet_formats.UDP import UDP as MyUDP
 from libs.packet_formats.Monitor import Monitor
+from libs.packet_formats.VLAN import Dot1Q
 
 from enum import Enum
 
@@ -368,9 +369,11 @@ class TrafficGen:
         # determine stream -> [ports] mapping
         stream_to_ports = defaultdict(list)
 
+        count = 0
         for s in streams:
             for element in stream_settings:
                 if element["stream_id"] == s["stream_id"] and element["active"]:
+                    count += 1
                     stream_to_ports[s["app_id"]].append(self.port_mapping.get(element["port"]).get("tx_recirc"))
 
                     # add header rewrite rules
@@ -413,6 +416,7 @@ class TrafficGen:
 
         def configureGenerator(factor=1):
             offset = 0
+            count = 0
 
             for s in streams:
                 if not s["app_id"] in stream_to_mc:
@@ -421,15 +425,24 @@ class TrafficGen:
 
                 s["active"] = True
 
-                # 14 byte + 20 byte + 8 byte + 13 byte = 55
+                # 14 byte (Eth) + 20 byte (IP) + 8 byte (UDP) + 13 byte (P4TG) = 55
+                # 14 byte (Eth) + 2x 4 byte (VLAN) + 20 byte (IP) + 8 byte (UDP) + 13 byte (P4TG) = 63
                 # we will rewrite the IP header in the egress
-                pkt = Ethernet(type=0x0800) / IPv4(proto=17, src="10.0.5.3") / MyUDP(sport=50081, dport=50083) / P4TG(
+                pkt = Ethernet( type=0x8100 ) / Dot1Q( vlan = 0 ) / Dot1Q(vlan = 0, type=0x0800) / IPv4(proto=17, src="10.0.5.3", dst="192.168.0.0", tos=count*4) / MyUDP(sport=50081, dport=50083) / P4TG(
+                # pkt = Ethernet( type=0x8100 ) / Dot1Q(vlan = 0, type=0x0800) / IPv4(proto=17, src="10.0.5.3", dst="192.168.0.0") / MyUDP(sport=50081, dport=50083) / P4TG(
+                # pkt = Ethernet( type=0x0800 ) / IPv4(proto=17, src="10.0.5.3") / MyUDP(sport=50081, dport=50083) / P4TG(
                     app_id=s["app_id"])
 
+                logging.debug(pkt.build())
+                count += 1
+
                 remaining = s["frame_size"] - len(pkt) - 4  # CRC not in scapy
+                if remaining < 0:
+                    remaining = 0
 
                 pkt = pkt / os.urandom(remaining)
                 pktlen = len(pkt)
+                logging.info("PKT len", pktlen)
 
                 # pkt[UDP].chksum = None
 

@@ -26,6 +26,7 @@ typedef bit<16> ether_type_t;
 typedef bit<32> reg_index_t;
 typedef bit<32> seq_t;
 const ether_type_t ETHERTYPE_IPV4 = 0x800;
+const ether_type_t ETHERTYPE_VLANQ = 0x8100;
 const ether_type_t ETHERTYPE_MONITOR = 0xBB02;
 
 const bit<8> IP_PROTOCOL_UDP = 17;
@@ -50,6 +51,13 @@ header ipv4_t {
     bit<16> hdr_checksum;
     ipv4_addr_t src_addr;
     ipv4_addr_t dst_addr;
+}
+
+header vlan_t {
+        bit<3> pcp;
+        bit<1> cfi;
+        bit<12> vid;
+        bit<16> ether_type;
 }
 
 header path_monitor_t {
@@ -92,6 +100,8 @@ header udp_t {
 struct header_t {
     ethernet_h ethernet;
     ipv4_t ipv4;
+    vlan_t vlan_outer;
+    vlan_t vlan_inner;
     pkg_gen_t pkt_gen;
     udp_t udp;
     monitor_t monitor;

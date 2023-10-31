@@ -69,7 +69,27 @@ parser SwitchIngressParser(
         transition select(hdr.ethernet.ether_type) {
             ETHERTYPE_MONITOR: parse_monitor;
             ETHERTYPE_IPV4: parse_ipv4;
+            ETHERTYPE_VLANQ: parse_vlan_outer;
             default: reject;
+        }
+    }
+
+    state parse_vlan_outer {
+        pkt.extract(hdr.vlan_outer);
+        transition select(hdr.vlan_outer.ether_type) {
+            ETHERTYPE_MONITOR: parse_monitor;
+            ETHERTYPE_IPV4: parse_ipv4;
+            ETHERTYPE_VLANQ: parse_vlan_inner;
+            default: accept;
+        }
+    }
+
+    state parse_vlan_inner {
+        pkt.extract(hdr.vlan_inner);
+        transition select(hdr.vlan_inner.ether_type) {
+            ETHERTYPE_MONITOR: parse_monitor;
+            ETHERTYPE_IPV4: parse_ipv4;
+            default: accept;
         }
     }
 
@@ -122,6 +142,8 @@ control SwitchIngressDeparser(
        }
 
         pkt.emit(hdr.ethernet);
+        pkt.emit(hdr.vlan_outer);
+        pkt.emit(hdr.vlan_inner);
         pkt.emit(hdr.ipv4);
         //pkt.emit(hdr.udp);
         pkt.emit(hdr.path);
@@ -155,6 +177,26 @@ parser SwitchEgressParser(
     state parse_ethernet {
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
+            ETHERTYPE_MONITOR: parse_monitor;
+            ETHERTYPE_IPV4: parse_ipv4;
+            ETHERTYPE_VLANQ: parse_vlan_outer;
+            default: accept;
+        }
+    }
+
+    state parse_vlan_outer {
+        pkt.extract(hdr.vlan_outer);
+        transition select(hdr.vlan_outer.ether_type) {
+            ETHERTYPE_MONITOR: parse_monitor;
+            ETHERTYPE_IPV4: parse_ipv4;
+            ETHERTYPE_VLANQ: parse_vlan_inner;
+            default: accept;
+        }
+    }
+
+    state parse_vlan_inner {
+        pkt.extract(hdr.vlan_inner);
+        transition select(hdr.vlan_inner.ether_type) {
             ETHERTYPE_MONITOR: parse_monitor;
             ETHERTYPE_IPV4: parse_ipv4;
             default: accept;
@@ -235,6 +277,8 @@ control SwitchEgressDeparser(
             }, zeros_as_ones = true);
 
         pkt.emit(hdr.ethernet);
+        pkt.emit(hdr.vlan_outer);
+        pkt.emit(hdr.vlan_inner);
         pkt.emit(hdr.ipv4);
         //pkt.emit(hdr.udp);
         pkt.emit(hdr.path);
